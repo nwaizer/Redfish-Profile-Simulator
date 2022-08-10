@@ -12,6 +12,7 @@ from .resource import RfResourceRaw
 from .sessionService import RfSessionServiceObj
 from .systems import RfSystemsCollection
 from .updateService import RfUpdateServiceObj
+from .eventService import RfEventServiceObj
 
 
 class RfServiceRoot(RfResource):
