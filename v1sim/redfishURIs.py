@@ -1,14 +1,18 @@
 # Copyright Notice:
 # Copyright 2016 Distributed Management Task Force, Inc. All rights reserved.
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Profile-Simulator/blob/master/LICENSE.md
-
+import http
 import json
 
 from flask import Flask
 from flask import request
+from flask import Response
 
 from .flask_redfish_auth import RfHTTPBasicOrTokenAuth
 from .resource import RfResource, RfResourceRaw, RfCollection
+from uuid import uuid4
+
+subscribe_payload_fields = ['Context', 'Destination', 'EventTypes', 'Protocol']
 
 
 def rfApi_SimpleServer(root, versions, host="127.0.0.1", port=5000):
@@ -16,6 +20,9 @@ def rfApi_SimpleServer(root, versions, host="127.0.0.1", port=5000):
 
     # create auth class that does basic or redifish session auth
     auth = RfHTTPBasicOrTokenAuth()
+
+    # A collection of event service subscriptions
+    subscriptions = dict()
 
     # define basic auth decorator used by flask
     # for basic auth, we only support user=catfish, passwd=hunter
@@ -27,13 +34,13 @@ def rfApi_SimpleServer(root, versions, host="127.0.0.1", port=5000):
         return False
 
     # define Redfish Token/Session auth decorator used by flask
-    # for session token auth, only support toden: 123456CATFISHauthcode
+    # for session token auth, only support token: 123456CATFISHauthcode
     @auth.verify_token
     def verify_rf_token(auth_token):
         # lookup the user for this token
         # lookup the privileges for this user
         # check privilege
-        # print("at verify_rf_token. auth_token={}".format(auth_token))
+        print("at verify_rf_token. auth_token={}".format(auth_token))
         if auth_token == "123456SESSIONauthcode":  # the magic token
             return True
         else:
@@ -246,7 +253,33 @@ def rfApi_SimpleServer(root, versions, host="127.0.0.1", port=5000):
             return "", status_code
         else:
             return err_string, status_code
-        
+
+# echo -n "123456SESSIONauthcode"|base64 -> MTIzNDU2U0VTU0lPTmF1dGhjb2Rl
+
+# curl  -H "Content-Type: application/json" -H "Authorization: Basic MTIzNDU2U0VTU0lPTmF1dGhjb2Rl" --request POST -d '{"Context":"root","Destination":"http://ok.com","EventTypes":"Alert","Protocol":"Redfish"' http://localhost:5000/redfish/v1/EventService/Subscriptions
+# curl  -H "Accept: application/json" -H "Authorization: Basic MTIzNDU2U0VTU0lPTmF1dGhjb2Rl" --request POST -d '{"Context":"root","Destination":"http://ok.com","EventTypes":"Alert","Protocol":"Redfish"' http://localhost:5000/redfish/v1/EventService/Subscriptions
+
+    @app.route("/redfish/v1/EventService/Subscriptions", methods=['POST'])
+    @auth.rfAuthRequired
+    def rf_eventservice_subscribe():
+        print("Subscribing to service events")
+        rdata = request.get_json(cache=True)
+        print("received this subscription payload: {}".format(rdata))
+        # validate fields
+        r_data_keys = rdata.keys().sort()
+        if r_data_keys != subscribe_payload_fields:
+            print("Received wrong Subscribe request with these fields: {} expected: {}".format(
+                r_data_keys, subscribe_payload_fields))
+            return "", http.HTTPStatus.BAD_REQUEST
+
+        subscription_key = uuid4()
+        subscriptions[subscription_key] = rdata
+
+        resp = Response("Subscription")
+        resp.headers["Location"] = "/redfish/v1/EventService/Subscriptions/"+subscription_key
+        #resp.status = http.HTTPStatus.ACCEPTED
+        return resp
+
     def resolve_path(service, path):
         parts = path.split('/')
         result = service
@@ -295,7 +328,7 @@ def rfApi_SimpleServer(root, versions, host="127.0.0.1", port=5000):
     # END file redfishURIs
 
     # start Flask REST engine running
-    app.run(host=host, port=port)
+    app.run(host=host, port=port, debug=True)
 
     # never returns
 

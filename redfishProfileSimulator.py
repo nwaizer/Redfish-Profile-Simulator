@@ -76,7 +76,7 @@ def main(argv):
         elif opt in "--Host=":
             rf_host = arg
         elif opt in "--Port=":
-            rf_port=int(arg)
+            rf_port = int(arg)
         else:
             print("  ", rfProgram1, ":  Error: unsupported option")
             rf_usage()
